@@ -1,0 +1,917 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>DATABEND - Obscure Edition (Normalized)</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#121212;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+:root{--accent:#0d7377;--muted:#242424}
+.app{height:100%;display:grid;grid-template-rows:auto 1fr 40px;gap:0}
+
+/* Header */
+.header{background:#1a1a1a;border-bottom:1px solid #333;padding:12px 24px;display:flex;align-items:center;justify-content:space-between}
+.logo{font-size:18px;font-weight:600;letter-spacing:1px}
+.header-center{display:flex;gap:10px;align-items:center}
+.header-center .btn{padding:8px 14px;font-size:12px;font-weight:600;border-radius:4px;cursor:pointer;text-transform:uppercase;letter-spacing:0.5px;background:var(--accent);border:none;color:#fff}
+.header-center .btn.secondary{background:#424242;color:#e0e0e0}
+.header-center .btn.secondary:hover{background:#505050}
+.header-center .btn:hover{background:#14a085}
+.header-right{display:flex;gap:16px;align-items:center;font-size:12px;color:#888}
+
+/* Main layout - Waveform view is now larger */
+.main{display:grid;grid-template-columns:2.5fr 1fr;overflow:hidden}
+.canvas-area{background:#0a0a0a;position:relative;overflow:hidden;border-right:1px solid #333}
+#canvas,#overlay{width:100%;height:100%;display:block;touch-action:none;position:absolute;top:0;left:0}
+
+/* Panel */
+.panel{background:#1a1a1a;border-left:1px solid #333;display:grid;grid-template-rows:auto 1fr auto;overflow:hidden; min-width: 320px;}
+.panel-header{padding:16px;border-bottom:1px solid #333;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#999}
+.panel-content{overflow-y:auto;padding:16px}
+.panel-content::-webkit-scrollbar{width:6px}
+.panel-content::-webkit-scrollbar-thumb{background:#333;border-radius:3px}
+.section{margin-bottom:20px}
+.section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#999;margin-bottom:10px}
+.btn{padding:10px 14px;background:var(--accent);border:none;color:#fff;font-size:12px;font-weight:600;border-radius:4px;cursor:pointer;transition:all .2s;text-transform:uppercase;letter-spacing:.5px;}
+.btn:hover{background:#14a085}
+.btn-secondary{background:#424242}
+.btn-secondary:hover{background:#505050}
+.btn-danger{background:#d32f2f}
+.btn-danger:hover{background:#f32c1e}
+.btn-group{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.control-label{font-size:11px;color:#999;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;display:block}
+input[type=range]{width:100%;height:4px;background:#2a2a2a;border:none;border-radius:2px;-webkit-appearance:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;background:var(--accent);border-radius:50%;cursor:pointer}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;background:var(--accent);border-radius:50%;cursor:pointer;border:none}
+input[type=number],select,input[type=text]{width:100%;padding:8px;background:#242424;border:1px solid #333;color:#e0e0e0;font-size:12px;border-radius:4px}
+.display{background:var(--muted);border:1px solid #333;padding:8px;border-radius:4px;font-size:11px;color:#aaa;font-family:monospace}
+.note{font-size:11px;color:#888;margin-top:8px}
+
+/* Progress bar */
+#glitchProgressWrap{position:absolute;left:0;right:0;bottom:12px;height:60px;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:40}
+#glitchProgress{pointer-events:auto;width:94%;max-width:1000px;height:46px;background:rgba(13,115,119,0.08);border:2px solid rgba(13,115,119,0.35);border-radius:8px;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;overflow:hidden;opacity:0;transform:translateY(16px) scale(0.96);transition:opacity .22s ease,transform .28s cubic-bezier(.2,.9,.3,1);color:#cfeeea;position:relative;font-family:"Courier New",monospace}
+#glitchProgress.show{opacity:1;transform:translateY(0) scale(1)}
+.progress-bar-fill{position:absolute;left:0;top:0;height:100%;background:linear-gradient(90deg,rgba(13,115,119,0.9),rgba(13,115,119,0.6));width:0%;transition:width .15s ease-out}
+.progress-bar-text{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-weight:700;color:#e6f9f7;text-shadow:0 0 4px rgba(13,115,119,0.8)}
+.footer{background:#1a1a1a;border-top:1px solid #333;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-size:11px;color:#666}
+
+/* Modal Styles */
+#modalOverlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100;display:none;align-items:center;justify-content:center;opacity:0;transition:opacity .2s ease}
+#modalOverlay.show{display:flex;opacity:1}
+#modalDialog{background:#1e1e1e;border:1px solid #333;border-radius:8px;width:90%;max-width:400px;box-shadow:0 8px 30px rgba(0,0,0,0.5);display:flex;flex-direction:column;transform:scale(0.95);transition:transform .2s ease}
+#modalOverlay.show #modalDialog{transform:scale(1)}
+#modalHeader{padding:14px 20px;border-bottom:1px solid #333}
+#modalTitle{font-size:14px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase}
+#modalContent{padding:20px;display:flex;flex-direction:column;gap:16px}
+#modalFooter{padding:14px 20px;border-top:1px solid #333;display:flex;gap:8px;justify-content:flex-end}
+.modal-control{display:flex;flex-direction:column;gap:8px}
+.modal-control .control-label{display:flex;justify-content:space-between}
+.modal-control .control-label .value-display{color:#e0e0e0;font-weight:600}
+
+/* ======= Responsive Mobile Styles ======= */
+@media (max-width: 768px) {
+  .app {
+    grid-template-rows: auto 1fr 40px;
+  }
+  .main {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(200px, 1fr) auto;
+    overflow-y: auto;
+  }
+  .panel {
+    border-left: none;
+    border-top: 1px solid #333;
+    grid-template-rows: auto 1fr;
+    min-height: 450px;
+  }
+  .canvas-area {
+    border-right: none;
+    min-height: 200px;
+  }
+  .header {
+    flex-wrap: wrap; padding: 12px; height: auto; gap: 12px; justify-content: center;
+  }
+  .header-center {
+    order: 2; width: 100%; justify-content: center;
+  }
+  .logo { order: 1; flex-basis: 50%; }
+  .header-right { order: 3; flex-basis: 50%; text-align: right; }
+  #modalDialog { width: 95%; }
+  .footer { padding: 0 12px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="logo">DATABEND</div>
+    <div class="header-center">
+      <button class="btn" id="playBtn">Play</button>
+      <button class="btn secondary" id="stopBtn">Stop</button>
+      <button class="btn secondary" id="exportBtn">Export</button>
+    </div>
+    <div class="header-right"><span id="status">Ready</span></div>
+  </div>
+
+  <div class="main">
+    <div class="canvas-area">
+      <canvas id="canvas"></canvas>
+      <canvas id="overlay"></canvas>
+      <div id="glitchProgressWrap"><div id="glitchProgress"><div class="progress-bar-fill" id="progressBarFill"></div><div class="progress-bar-text" id="progressBarText">0%</div></div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">Controls</div>
+      <div class="panel-content">
+
+        <div class="section">
+          <div class="section-title">File</div>
+          <button class="btn" id="loadBtn" style="width:100%">Load Audio</button>
+          <div class="display" id="fileInfo" style="margin-top:8px">No file loaded</div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Selection Tools</div>
+          <button class="btn" id="duplicateBtn" style="width:100%">Duplicate Selection</button>
+          <button class="btn btn-danger" id="deleteBtn" style="width:100%; margin-top:8px;">Delete Selection</button>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Databend</div>
+          <label class="control-label">Global Intensity (for old ops)</label>
+          <input type="range" id="intensity" min="0" max="100" value="50">
+          <div style="margin-top:8px" class="btn-group">
+            <button class="btn" id="bitcrushBtn">BitCrush</button>
+            <button class="btn" id="foldBtn">Fold</button>
+          </div>
+          <div style="margin-top:8px" class="btn-group">
+            <button class="btn" id="shiftBtn">Shift</button>
+            <button class="btn" id="invertBtn">Invert</button>
+          </div>
+          <div style="margin-top:8px" class="btn-group">
+            <button class="btn" id="randomBtn">Random</button>
+            <button class="btn btn-danger" id="corruptBtn">Corrupt</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Glitch</div>
+          <label class="control-label">Chunk Size</label>
+          <input type="number" id="chunkSize" value="512" min="4" step="4">
+          <div style="margin-top:8px" class="btn-group">
+            <button class="btn" id="granularBtn">Granular</button>
+            <button class="btn" id="stutterBtn">Stutter</button>
+          </div>
+          <div style="margin-top:8px" class="btn-group">
+            <button class="btn" id="reverseBtn">Reverse</button>
+            <button class="btn" id="scrambleBtn">Scramble</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Obscure</div>
+          <div class="btn-group">
+            <button class="btn" id="ringBtn">Ring Mod</button>
+            <button class="btn" id="warpBtn">Bit Warp</button>
+          </div>
+          <div style="margin-top:8px" class="btn-group">
+            <button class="btn" id="chebyBtn">Chebyshev</button>
+            <button class="btn" id="combBtn">Feedback</button>
+          </div>
+           <div style="margin-top:8px" class="btn-group">
+              <button class="btn" id="tapeStopBtn">Tape Stop</button>
+              <button class="btn" id="melterBtn">Melter</button>
+          </div>
+          <div style="margin-top:8px" class="btn-group">
+              <button class="btn" id="shredderBtn">Shredder</button>
+              <button class="btn" id="bitScrambleBtn">Bit Scramble</button>
+          </div>
+          <button class="btn" id="smearBtn" style="margin-top:8px;width:100%">Spectral Smear</button>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Modulation & FX</div>
+          <div class="btn-group">
+            <button class="btn" id="filterBtn">Filter</button>
+            <button class="btn" id="phaserBtn">Phaser</button>
+          </div>
+          <div style="margin-top:8px" class="btn-group">
+            <button class="btn" id="delayBtn">Delay</button>
+            <button class="btn" id="reverbBtn">Reverb</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">History</div>
+          <div class="btn-group">
+            <button class="btn secondary" id="undoBtn">Undo</button>
+            <button class="btn secondary" id="redoBtn">Redo</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="footer"><div id="duration">0.00s</div><div>DATABEND - Audio Bender</div></div>
+</div>
+
+<div id="modalOverlay">
+  <div id="modalDialog">
+    <div id="modalHeader"><div id="modalTitle">Process</div></div>
+    <div id="modalContent"></div>
+    <div id="modalFooter">
+      <button class="btn secondary" id="modalCancel">Cancel</button>
+      <button class="btn secondary" id="modalRandom">Random</button>
+      <button class="btn" id="modalCommit">Commit</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ======= DOM refs ======= */
+const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay'), octx = overlay.getContext('2d');
+const loadBtn = document.getElementById('loadBtn');
+const playBtn = document.getElementById('playBtn');
+const stopBtn = document.getElementById('stopBtn');
+const exportBtn = document.getElementById('exportBtn');
+const undoBtn = document.getElementById('undoBtn');
+const redoBtn = document.getElementById('redoBtn');
+const duplicateBtn = document.getElementById('duplicateBtn');
+const deleteBtn = document.getElementById('deleteBtn');
+const bitcrushBtn = document.getElementById('bitcrushBtn');
+const foldBtn = document.getElementById('foldBtn');
+const shiftBtn = document.getElementById('shiftBtn');
+const invertBtn = document.getElementById('invertBtn');
+const randomBtn = document.getElementById('randomBtn');
+const corruptBtn = document.getElementById('corruptBtn');
+const granularBtn = document.getElementById('granularBtn');
+const stutterBtn = document.getElementById('stutterBtn');
+const reverseBtn = document.getElementById('reverseBtn');
+const scrambleBtn = document.getElementById('scrambleBtn');
+const ringBtn = document.getElementById('ringBtn');
+const warpBtn = document.getElementById('warpBtn');
+const smearBtn = document.getElementById('smearBtn');
+const chebyBtn = document.getElementById('chebyBtn');
+const combBtn = document.getElementById('combBtn');
+const filterBtn = document.getElementById('filterBtn');
+const phaserBtn = document.getElementById('phaserBtn');
+const delayBtn = document.getElementById('delayBtn');
+const reverbBtn = document.getElementById('reverbBtn');
+const tapeStopBtn = document.getElementById('tapeStopBtn');
+const melterBtn = document.getElementById('melterBtn');
+const shredderBtn = document.getElementById('shredderBtn');
+const bitScrambleBtn = document.getElementById('bitScrambleBtn');
+const intensityEl = document.getElementById('intensity');
+const chunkSizeEl = document.getElementById('chunkSize');
+const statusEl = document.getElementById('status');
+const fileInfoEl = document.getElementById('fileInfo');
+const durationEl = document.getElementById('duration');
+const glitchBox = document.getElementById('glitchProgress');
+const progressBarFill = document.getElementById('progressBarFill');
+const progressBarText = document.getElementById('progressBarText');
+const modalOverlay = document.getElementById('modalOverlay');
+const modalTitle = document.getElementById('modalTitle');
+const modalContent = document.getElementById('modalContent');
+const modalCommit = document.getElementById('modalCommit');
+const modalRandom = document.getElementById('modalRandom');
+const modalCancel = document.getElementById('modalCancel');
+
+/* ======= Audio / State ======= */
+let audioCtx = null;
+let current = null, history = [], historyIndex = -1;
+let playing = false, playSource = null, playStartTime = 0, playOffset = 0, playLoopActive = false;
+let loopStart = 0, loopEnd = 0;
+const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#0d7377';
+
+/* ======= IndexedDB Logic ======= */
+const DB_NAME = 'databendDB', STORE_NAME = 'audioStore';
+let db;
+async function openDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onerror = () => reject("Error opening DB");
+    request.onsuccess = (e) => { db = e.target.result; resolve(db); };
+    request.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
+    };
+  });
+}
+async function saveAudioToDB(float32Array) {
+  if (!db) await openDB();
+  const tx = db.transaction([STORE_NAME], 'readwrite');
+  return tx.objectStore(STORE_NAME).put(float32Array, 'lastAudioBuffer');
+}
+async function loadAudioFromDB() {
+  if (!db) await openDB();
+  const tx = db.transaction([STORE_NAME], 'readonly');
+  return new Promise(res => {
+    const req = tx.objectStore(STORE_NAME).get('lastAudioBuffer');
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => res(null);
+  });
+}
+
+/* ======= Init ======= */
+async function init(){
+  // Initialize AudioContext on first user interaction
+  document.addEventListener('click', initAudioContext, { once: true });
+  
+  resizeCanvases();
+  window.addEventListener('resize', resizeCanvases);
+  requestAnimationFrame(drawLoop);
+  setupOverlayInteraction();
+  setupModal();
+  
+  try {
+    setStatus('Checking for saved audio...');
+    const savedAudio = await loadAudioFromDB();
+    if (savedAudio && savedAudio.length > 0) {
+      current = savedAudio;
+      history = [savedAudio.slice()];
+      historyIndex = 0;
+      updateUI();
+      setStatus('Restored previous audio', 1200);
+    } else {
+      setStatus('Ready - Load an audio file to begin');
+    }
+  } catch (err) { 
+    console.error("Could not load from DB:", err); 
+    setStatus('Ready - Load an audio file to begin'); 
+  }
+}
+
+/**
+ * NEW: Sets up a one-time event listener to resume the AudioContext on the next user interaction.
+ * This is crucial for mobile devices where the context can be suspended automatically.
+ */
+function armAudioResume() {
+  const resumeHandler = async () => {
+    if (audioCtx && audioCtx.state === 'suspended') {
+      try {
+        await audioCtx.resume();
+      } catch (e) {
+        console.error('Error resuming AudioContext:', e);
+      }
+    }
+  };
+  // Use capture to ensure this fires first, and once to automatically remove the listener.
+  document.body.addEventListener('click', resumeHandler, { once: true, capture: true });
+  document.body.addEventListener('touchend', resumeHandler, { once: true, capture: true });
+}
+
+/**
+ * MODIFIED: Now includes a statechange listener to detect and handle audio interruptions.
+ */
+function initAudioContext() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    console.log('AudioContext initialized, sample rate:', audioCtx.sampleRate);
+    
+    // Listen for state changes (e.g., when headphones are unplugged)
+    audioCtx.addEventListener('statechange', () => {
+      console.log('AudioContext state is now:', audioCtx.state);
+      if (audioCtx.state === 'suspended') {
+        setStatus('Audio paused. Interact to resume.', 0); // Persistent message
+        armAudioResume();
+      } else if (audioCtx.state === 'running') {
+        // Clear the "paused" message if it's showing
+        if(statusEl.textContent.startsWith('Audio paused')) {
+          setStatus('Audio resumed', 1200);
+        }
+      }
+    });
+  }
+  
+  // This initial resume attempt is still important
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().then(() => {
+      console.log('AudioContext resumed on initial load');
+    });
+  }
+}
+
+init();
+
+/* ======= Canvas & UI Helpers ======= */
+function resizeCanvases(){
+  [ctx, octx].forEach(c => {
+    const canvasEl = c.canvas;
+    c.setTransform(1,0,0,1,0,0);
+    canvasEl.width = canvasEl.offsetWidth * devicePixelRatio;
+    canvasEl.height = canvasEl.offsetHeight * devicePixelRatio;
+    c.scale(devicePixelRatio, devicePixelRatio);
+  });
+}
+function setStatus(text, ms=1200){
+  statusEl.textContent = text;
+  if(ms>0){ clearTimeout(setStatus._t); setStatus._t = setTimeout(()=>{ if(statusEl.textContent===text) statusEl.textContent='Ready'; }, ms); }
+}
+
+/* ======= File Loading ======= */
+loadBtn.onclick = () => {
+  initAudioContext();
+  const inp = document.createElement('input');
+  inp.type = 'file'; 
+  inp.accept = 'audio/*,audio/wav,audio/mp3,audio/ogg,audio/mpeg,audio/aac,audio/flac';
+  inp.multiple = false;
+  
+  inp.onchange = async (e) => {
+    const file = e.target.files[0]; 
+    if(!file) { setStatus('No file selected', 800); return; }
+    setStatus('Loading ' + file.name + '...');
+    
+    try {
+      if (!audioCtx) initAudioContext();
+      if(audioCtx.state === 'suspended') await audioCtx.resume();
+      
+      const ab = await file.arrayBuffer();
+      const decoded = await audioCtx.decodeAudioData(ab);
+      
+      const len = decoded.length;
+      const samp = new Float32Array(len);
+      
+      if(decoded.numberOfChannels === 1) {
+        samp.set(decoded.getChannelData(0));
+      } else {
+        const L = decoded.getChannelData(0), R = decoded.getChannelData(1);
+        for(let i=0;i<len;i++) samp[i]=(L[i]+R[i])*0.5;
+      }
+      
+      current = samp; 
+      history = []; 
+      historyIndex = -1;
+      loopStart = 0;
+      loopEnd = 0;
+      updateUI(); 
+      await saveState();
+      setStatus('Loaded: ' + file.name, 2000);
+    } catch(err){ 
+      console.error('Error loading file:', err); 
+      setStatus('Error: ' + err.message, 3000); 
+      alert('Error loading file: ' + err.message + '\n\nPlease check the browser console (F12) for more details.');
+    }
+  };
+  
+  try {
+    inp.click();
+  } catch(err) {
+    console.error('Error opening file picker:', err);
+    alert('Could not open file picker. Please try again.');
+  }
+};
+
+/* ======= History & State ======= */
+async function saveState(){
+  if(!current) return;
+  history = history.slice(0,historyIndex+1);
+  history.push(current.slice());
+  historyIndex++;
+  if(history.length>50){ history.shift(); historyIndex--; }
+  try { 
+    await saveAudioToDB(current); 
+  }
+  catch(err) { 
+    console.error('Failed to save state:', err); 
+    setStatus('Save failed', 1000); 
+  }
+}
+undoBtn.onclick = async () => {
+  if(historyIndex>0){
+    historyIndex--;
+    current=history[historyIndex].slice();
+    updateUI(); setStatus('Undo');
+    await saveAudioToDB(current);
+  } else setStatus('Nothing to undo',600);
+};
+redoBtn.onclick = async () => {
+  if(historyIndex<history.length-1){
+    historyIndex++;
+    current=history[historyIndex].slice();
+    updateUI(); setStatus('Redo');
+    await saveAudioToDB(current);
+  } else setStatus('Nothing to redo',600);
+};
+
+/* ======= Progress UI & Conversion Functions ======= */
+let progressState = { fraction:0, label:'' };
+function renderProgress(){ const percent = Math.round((progressState.fraction||0)*100); progressBarFill.style.width = percent + '%'; progressBarText.textContent = percent + '%'; }
+function glitchProgressStart(label='Processing...', duration=900){
+  progressState.label = label; progressState.fraction = 0;
+  glitchBox.classList.add('show');
+  renderProgress();
+  const start = performance.now();
+  function tick(now){
+    const t = now - start;
+    const frac = Math.min(1, t / duration);
+    progressState.fraction = frac;
+    renderProgress();
+    if(frac < 1) requestAnimationFrame(tick);
+    else setTimeout(()=>{ glitchBox.classList.remove('show'); }, 120);
+  }
+  requestAnimationFrame(tick);
+}
+function f32ToInt16Buffer(float32){
+  const buf = new ArrayBuffer(float32.length*2);
+  const dv = new DataView(buf);
+  for(let i=0,o=0;i<float32.length;i++,o+=2){
+    let v=Math.max(-1,Math.min(1,float32[i]));
+    dv.setInt16(o, v<0? v*0x8000 : v*0x7FFF, true);
+  }
+  return buf;
+}
+function int16BufferToF32(buf){
+  const dv=new DataView(buf);
+  const len=dv.byteLength/2;
+  const out=new Float32Array(len);
+  for(let i=0,o=0;i<len;i++,o+=2){ out[i]=dv.getInt16(o,true)/0x7FFF; }
+  return out;
+}
+
+
+/* ======= Core Processing Logic ======= */
+function applybend(fn, opts) {
+  if (!current) { setStatus('Load a file first', 800); return; }
+  if (!audioCtx) initAudioContext();
+  if (playing) stopPlaybackSilent();
+  
+  const sr = audioCtx.sampleRate;
+  const hasLoop = loopEnd > loopStart && (loopEnd - loopStart) > 0.02;
+  const startSample = hasLoop ? Math.floor(loopStart * sr) : 0;
+  const endSample = hasLoop ? Math.floor(loopEnd * sr) : current.length;
+
+  glitchProgressStart((opts.label || 'Processing...'), opts.duration || 900);
+
+  setTimeout(async () => {
+    try {
+      await saveState();
+      const region = current.slice(startSample, endSample);
+      
+      let oldPeak = 0;
+      for (let i = 0; i < region.length; i++) { const a = Math.abs(region[i]); if (a > oldPeak) oldPeak = a; }
+      oldPeak = Math.max(oldPeak, 1e-6);
+      
+      const processed = fn(region, { ...opts, sr });
+
+      let newPeak = 0;
+      for (let i = 0; i < processed.length; i++) { const a = Math.abs(processed[i]); if (a > newPeak) newPeak = a; }
+      newPeak = Math.max(newPeak, 1e-6);
+      
+      const scale = oldPeak / newPeak;
+      if (isFinite(scale) && Math.abs(scale - 1) > 0.001 && scale > 0) {
+        for (let i = 0; i < processed.length; i++) processed[i] *= scale;
+      }
+      for (let i = 0; i < processed.length; i++) processed[i] = Math.max(-1.0, Math.min(1.0, processed[i]));
+
+      current.set(processed, startSample);
+      updateUI();
+      await saveAudioToDB(current);
+      setStatus('Processed', 900);
+    } catch (err) { console.error('applybend err', err); setStatus('Error', 1200); }
+  }, 50);
+}
+
+/* ======= Modal Logic ======= */
+let currentModal = { controls: {}, callback: null };
+function setupModal() {
+  modalCancel.onclick = hideModal;
+  modalOverlay.onclick = (e) => { if(e.target === modalOverlay) hideModal(); };
+  modalCommit.onclick = () => {
+    if (currentModal.callback) {
+      const values = {};
+      for (const key in currentModal.controls) {
+        const id = `modal-control-${key}`;
+        const input = document.getElementById(id);
+        if (input) values[key] = parseFloat(input.value);
+      }
+      currentModal.callback(values);
+    }
+    hideModal();
+  };
+  modalRandom.onclick = () => {
+     for (const key in currentModal.controls) {
+        const c = currentModal.controls[key];
+        const id = `modal-control-${key}`;
+        const input = document.getElementById(id);
+        const valueDisplay = document.getElementById(`${id}-value`);
+        if (input) {
+          const min=parseFloat(c.min), max=parseFloat(c.max), step=parseFloat(c.step)||1;
+          const range = (max - min) / step;
+          const rVal = min + Math.floor(Math.random()*(range+1))*step;
+          input.value = rVal;
+          if (valueDisplay) valueDisplay.textContent = rVal.toFixed(step<1?2:0);
+        }
+      }
+  };
+}
+function showModal(config) {
+  if (!current) { setStatus('Load a file first', 800); return; }
+  if (!audioCtx) initAudioContext();
+  currentModal = config;
+  modalTitle.textContent = config.title;
+  modalContent.innerHTML = '';
+  for (const key in config.controls) {
+    const c = config.controls[key];
+    const id = `modal-control-${key}`;
+    const controlWrapper = document.createElement('div');
+    controlWrapper.className = 'modal-control';
+    const labelHTML = `<div class="control-label">${c.label}<span class="value-display" id="${id}-value">${c.defaultValue}</span></div>`;
+    const inputHTML = `<input type="range" id="${id}" min="${c.min}" max="${c.max}" step="${c.step || 1}" value="${c.defaultValue}">`;
+    controlWrapper.innerHTML = labelHTML + inputHTML;
+    modalContent.appendChild(controlWrapper);
+    const input = document.getElementById(id), vDisplay = document.getElementById(`${id}-value`);
+    input.oninput = () => { vDisplay.textContent = parseFloat(input.value).toFixed(c.step < 1 ? 2 : 0); };
+  }
+  modalOverlay.classList.add('show');
+}
+function hideModal() { modalOverlay.classList.remove('show'); }
+
+/* ======= Processors ======= */
+bitcrushBtn.onclick=()=>showModal({title:'Bitcrush',controls:{bits:{label:'Bit Depth',min:1,max:16,step:1,defaultValue:8}},callback:(opts)=>applybend(r=>{const o=new Float32Array(r.length),s=Math.pow(0.5,opts.bits-1);for(let i=0;i<r.length;i++)o[i]=s*Math.floor(r[i]/s+0.5);return o},{label:'BitCrushing...'})});
+foldBtn.onclick=()=>showModal({title:'Wavefolder',controls:{gain:{label:'Gain',min:1,max:50,step:1,defaultValue:10},folds:{label:'Folds',min:1,max:20,step:1,defaultValue:5}},callback:(opts)=>applybend(r=>{const o=new Float32Array(r.length);for(let i=0;i<r.length;i++){let v=r[i]*opts.gain;for(let f=0;f<opts.folds;f++)v=Math.abs(Math.abs(v)-1);o[i]=(v*2-1)/opts.gain}return o},{label:'Folding...'})});
+shiftBtn.onclick=()=>applybend(r=>{const s=Math.floor(parseInt(intensityEl.value||50)/10),d=new DataView(f32ToInt16Buffer(r));for(let i=0;i<d.byteLength;i+=2){let v=d.getInt16(i,!0);d.setInt16(i,Math.max(-32768,Math.min(32767,v<<s)),!0)}return int16BufferToF32(d.buffer)},{label:'Shifting...'});
+invertBtn.onclick=()=>applybend(r=>{const c=parseInt(intensityEl.value||50)/100,a=new Uint8Array(f32ToInt16Buffer(r));for(let i=0;i<a.length;i++)if(Math.random()<c)a[i]=~a[i]&255;return int16BufferToF32(a.buffer)},{label:'Inverting...'});
+randomBtn.onclick=()=>applybend(r=>{const c=parseInt(intensityEl.value||50)/100,d=new DataView(f32ToInt16Buffer(r));for(let i=0;i<d.byteLength;i++)if(Math.random()<c)d.setUint8(i,Math.floor(Math.random()*256));return int16BufferToF32(d.buffer)},{label:'Randomizing...'});
+corruptBtn.onclick=()=>applybend(r=>{const n=Math.floor(r.length*2/100*parseInt(intensityEl.value||50)),d=new DataView(f32ToInt16Buffer(r));for(let i=0;i<n;i++)d.setUint8(Math.floor(Math.random()*d.byteLength),Math.floor(Math.random()*256));return int16BufferToF32(d.buffer)},{label:'Corrupting...'});
+granularBtn.onclick=()=>{const c=Math.max(4,parseInt(chunkSizeEl.value)||512);applybend(r=>{const o=new Float32Array(r.length),cs=Math.floor(r.length/c);if(cs<1)return r.slice();for(let i=0;i<r.length;i++){const g=Math.floor(Math.random()*cs)*c;o[i]=r[Math.min(g+i%c,r.length-1)]}return o},{label:'Granularizing...'})};
+stutterBtn.onclick=()=>{const c=Math.max(4,parseInt(chunkSizeEl.value)||512);applybend(r=>{const o=new Float32Array(r.length);for(let i=0;i<r.length;i++){const s=Math.floor(i/c)*c;o[i]=r[Math.min(s,r.length-1)]}return o},{label:'Stuttering...'})};
+reverseBtn.onclick=()=>applybend(r=>{const o=r.slice();o.reverse();return o},{label:'Reversing...'});
+scrambleBtn.onclick=()=>applybend(r=>{const c=Math.max(4,parseInt(chunkSizeEl.value)||512),o=r.slice();for(let i=0;i<o.length;i+=c){const s=o.slice(i,Math.min(i+c,o.length));for(let j=s.length-1;j>0;j--){const k=Math.floor(Math.random()*(j+1));[s[j],s[k]]=[s[k],s[j]]}o.set(s,i)}return o},{label:'Scrambling...'});
+ringBtn.onclick=()=>showModal({title:'Ring Modulator',controls:{freq:{label:'Freq (Hz)',min:20,max:5e3,step:1,defaultValue:440},modDepth:{label:'Mod Depth',min:0,max:1,step:.01,defaultValue:.5},modRate:{label:'Mod Rate (Hz)',min:.1,max:20,step:.1,defaultValue:2}},callback:opts=>applybend((r,{sr})=>{const o=new Float32Array(r.length);for(let i=0;i<r.length;i++){const t=i/sr,m=Math.sin(2*Math.PI*opts.modRate*t)*opts.modDepth,cF=opts.freq*(1+m*.5);o[i]=r[i]*Math.sin(2*Math.PI*cF*t)}return o},{label:'Ring Mod...'})});
+warpBtn.onclick=()=>showModal({title:'Bit Warp',controls:{warp:{label:'Warp',min:1,max:20,step:.1,defaultValue:10},mix:{label:'Mix',min:0,max:1,step:.01,defaultValue:1}},callback:opts=>applybend(r=>{const o=new Float32Array(r.length);for(let i=0;i<r.length;i++){const x=r[i],s=Math.sign(x)*(1-Math.exp(-Math.abs(x)*opts.warp)),w=Math.tanh(s*(1+opts.warp/10));o[i]=x*(1-opts.mix)+w*opts.mix}return o},{label:'Bit Warping...'})});
+smearBtn.onclick=()=>showModal({title:'Spectral Smear',controls:{windowSize:{label:'Window Size',min:256,max:4096,step:128,defaultValue:1024},jitter:{label:'Jitter',min:0,max:1,step:.01,defaultValue:.5},mix:{label:'Mix',min:0,max:1,step:.01,defaultValue:.7}},callback:opts=>applybend(r=>{const l=r.length,wS=opts.windowSize,h=Math.floor(wS/2),o=new Float32Array(l),w=new Float32Array(wS);for(let i=0;i<wS;i++)w[i]=.5*(1-Math.cos(2*Math.PI*i/(wS-1)));const a=new Float32Array(l),cs=new Float32Array(l);for(let p=0;p<l;p+=h){const b=new Float32Array(wS);for(let i=0;i<wS;i++)b[i]=r[Math.min(l-1,p+i)]*w[i];const bs=8,bSz=Math.floor(wS/bs),bB=new Float32Array(wS);for(let j=0;j<bs;j++){const s=j*bSz,e=Math.min(wS,s+bSz),jA=Math.floor((Math.random()-.5)*opts.jitter*bSz);for(let k=s;k<e;k++){const t=k+jA;if(t>=0&&t<wS)bB[t]+=b[k]*.9}}for(let i=0;i<wS;i++){const idx=Math.min(l-1,p+i);a[idx]+=bB[i]*w[i];cs[idx]+=w[i]*w[i]}}for(let i=0;i<l;i++)o[i]=cs[i]>1e-6?a[i]/cs[i]:r[i];for(let i=0;i<l;i++)o[i]=o[i]*opts.mix+r[i]*(1-opts.mix);return o},{label:'Smearing...'})});
+chebyBtn.onclick=()=>showModal({title:'Chebyshev',controls:{order:{label:'Order',min:2,max:32,step:1,defaultValue:8},mix:{label:'Mix',min:0,max:1,step:.01,defaultValue:.5}},callback:opts=>applybend(r=>{const o=new Float32Array(r.length);for(let i=0;i<r.length;i++){const x=r[i];let T_p=1,T_c=x;for(let k=1;k<opts.order;k++){let T_n=2*x*T_c-T_p;T_p=T_c;T_c=T_n}o[i]=x*(1-opts.mix)+T_c*opts.mix}return o},{label:'Warping...'})});
+combBtn.onclick=()=>showModal({title:'Feedback Comb',controls:{freq:{label:'Freq (Hz)',min:30,max:4e3,step:1,defaultValue:150},feedback:{label:'Feedback',min:.1,max:.99,step:.01,defaultValue:.85},mix:{label:'Mix',min:0,max:1,step:.01,defaultValue:.5}},callback:opts=>applybend((r,{sr})=>{const dS=Math.floor(sr/opts.freq),o=new Float32Array(r.length);for(let i=0;i<r.length;i++){const d=o[i-dS]||0,p=r[i]+opts.feedback*d;o[i]=r[i]*(1-opts.mix)+p*opts.mix}return o},{label:'Feedback...'})});
+tapeStopBtn.onclick=()=>showModal({title:'Tape Stop',controls:{duration:{label:'Duration (s)',min:.1,max:5,step:.1,defaultValue:1},curve:{label:'Curve',min:.2,max:5,step:.1,defaultValue:2}},callback:opts=>applybend((r,{sr})=>{const len=r.length,o=new Float32Array(len),stopSamps=Math.min(len,Math.floor(opts.duration*sr));for(let i=0;i<len;i++){if(i<stopSamps){const p=i/stopSamps,pC=Math.pow(p,opts.curve),sIdx=Math.floor(pC*(stopSamps-1)),vol=1-p;o[i]=r[sIdx]*vol}else{o[i]=0}}return o},{label:'Tape Stop...'})});
+melterBtn.onclick=()=>showModal({title:'Melter',controls:{chunkSize:{label:'Chunk Size',min:4,max:256,step:4,defaultValue:32},feedback:{label:'Feedback',min:0,max:.99,step:.01,defaultValue:.8},mix:{label:'Mix',min:0,max:1,step:.01,defaultValue:.5}},callback:opts=>applybend(r=>{const o=new Float32Array(r.length);let fb=0;for(let i=0;i<r.length;i++){const s=r[i];if(i%opts.chunkSize===0)fb=0;fb=s*.5+fb*.5;o[i]=(r[i]*(1-opts.mix))+(fb*opts.mix)}return o},{label:'Melting...'})});
+shredderBtn.onclick=()=>showModal({title:'Shredder',controls:{sliceDiv:{label:'Slice Divisor',min:4,max:64,step:4,defaultValue:16},reps:{label:'Repetitions',min:1,max:16,step:1,defaultValue:4},chance:{label:'Chance',min:0,max:1,step:.01,defaultValue:.5}},callback:opts=>applybend((r,{sr})=>{const o=new Float32Array(r.length),sliceLen=Math.floor(sr/opts.sliceDiv);for(let i=0;i<r.length;i+=sliceLen){if(Math.random()<opts.chance){const grain=r.slice(i,i+Math.floor(sliceLen/opts.reps));for(let j=0;j<sliceLen&&i+j<r.length;j++)o[i+j]=grain[j%grain.length]}else{for(let j=0;j<sliceLen&&i+j<r.length;j++)o[i+j]=r[i+j]}}return o},{label:'Shredding...'})});
+bitScrambleBtn.onclick=()=>showModal({title:'Bit Scramble',controls:{chunkSize:{label:'Chunk Size (bytes)',min:2,max:64,step:2,defaultValue:8},intensity:{label:'Intensity',min:0,max:1,step:.01,defaultValue:.5}},callback:opts=>applybend(r=>{const arr=new Uint8Array(f32ToInt16Buffer(r));for(let i=0;i<arr.length;i+=opts.chunkSize){if(Math.random()<opts.intensity){const s=arr.slice(i,i+opts.chunkSize);for(let j=s.length-1;j>0;j--){const k=Math.floor(Math.random()*(j+1));[s[j],s[k]]=[s[k],s[j]]}arr.set(s,i)}}return int16BufferToF32(arr.buffer)},{label:'Scrambling Bits...'})});
+filterBtn.onclick=()=>showModal({title:'Filter',controls:{type:{label:'Type (1=LP,-1=HP)',min:-1,max:1,step:2,defaultValue:1},freq:{label:'Freq (Hz)',min:50,max:15e3,step:10,defaultValue:2e3},q:{label:'Q',min:.1,max:30,step:.1,defaultValue:1}},callback:opts=>applybend((r,{sr})=>{const o=new Float32Array(r.length),w0=2*Math.PI*opts.freq/sr,alpha=Math.sin(w0)/(2*opts.q),cosw0=Math.cos(w0);let b0,b1,b2,a0,a1,a2;if(opts.type>0){b0=(1-cosw0)/2;b1=1-cosw0;b2=(1-cosw0)/2}else{b0=(1+cosw0)/2;b1=-(1+cosw0);b2=(1+cosw0)/2}a0=1+alpha;a1=-2*cosw0;a2=1-alpha;let x1=0,x2=0,y1=0,y2=0;for(let i=0;i<r.length;i++){const x0=r[i],y0=(b0/a0)*x0+(b1/a0)*x1+(b2/a0)*x2-(a1/a0)*y1-(a2/a0)*y2;o[i]=y0;x2=x1;x1=x0;y2=y1;y1=y0}return o},{label:'Filtering...'})});
+phaserBtn.onclick=()=>showModal({title:'Phaser',controls:{rate:{label:'Rate (Hz)',min:.1,max:10,step:.1,defaultValue:1},depth:{label:'Depth',min:.1,max:1,step:.01,defaultValue:.7},feedback:{label:'Feedback',min:0,max:.9,step:.01,defaultValue:.5}},callback:opts=>applybend((r,{sr})=>{const o=new Float32Array(r.length),s=4,ap=Array(s).fill(0).map(()=>({z:0}));let fb=0;for(let i=0;i<r.length;i++){const lfo=Math.sin(2*Math.PI*opts.rate*(i/sr)),d=.5*(1+lfo)*opts.depth;let y=r[i]+fb*opts.feedback;for(let j=0;j<s;j++){const z=ap[j].z;ap[j].z=y*d+z*(1-d);y=ap[j].z-y*d}fb=y;o[i]=r[i]*.5+y*.5}return o},{label:'Phasing...'})});
+delayBtn.onclick=()=>showModal({title:'Delay',controls:{time:{label:'Time (ms)',min:10,max:2e3,step:1,defaultValue:250},feedback:{label:'Feedback',min:0,max:.9,step:.01,defaultValue:.5},mix:{label:'Mix',min:0,max:1,step:.01,defaultValue:.5}},callback:opts=>applybend((r,{sr})=>{const dS=Math.floor(sr*opts.time/1e3),o=new Float32Array(r.length+dS);o.set(r);for(let i=0;i<o.length;i++){const d=o[i-dS]||0;o[i]+=d*opts.feedback}const f=r.slice();for(let i=0;i<f.length;i++)f[i]=r[i]*(1-opts.mix)+o[i]*opts.mix;return f},{label:'Delaying...'})});
+reverbBtn.onclick=()=>showModal({title:'Reverb',controls:{roomSize:{label:'Room Size',min:.1,max:.99,step:.01,defaultValue:.7},mix:{label:'Mix',min:0,max:1,step:.01,defaultValue:.4}},callback:opts=>applybend((r,{sr})=>{const ds=[1613,2053,2671,3121].map(d=>Math.floor(d*(sr/44100))),cs=ds.map(d=>({buf:new Float32Array(d),idx:0,fb:opts.roomSize})),y=new Float32Array(r.length);for(let i=0;i<r.length;i++){let s=r[i],cb_out=0;for(const c of cs){const d=c.buf[c.idx];c.buf[c.idx]=s+d*c.fb;c.idx=(c.idx+1)%c.buf.length;cb_out+=d}y[i]=cb_out/cs.length}for(let i=0;i<r.length;i++)y[i]=r[i]*(1-opts.mix)+y[i]*opts.mix;return y},{label:'Reverb...'})});
+
+/* ======= Selection & Playback ======= */
+duplicateBtn.onclick = () => duplicateLoop();
+deleteBtn.onclick = () => deleteLoop();
+
+async function duplicateLoop() {
+  if (!current) { setStatus('Load a file first', 800); return; }
+  if (!audioCtx) initAudioContext();
+  const hasLoop = loopEnd > loopStart && (loopEnd - loopStart) > 0.02;
+  if (!hasLoop) { setStatus('Select a region to duplicate', 1000); return; }
+  if (playing) stopPlaybackSilent();
+  
+  await saveState();
+  const sr = audioCtx.sampleRate;
+  const startSample = Math.floor(loopStart * sr);
+  const endSample = Math.floor(loopEnd * sr);
+  
+  const loopData = current.slice(startSample, endSample);
+  const partAfter = current.slice(endSample);
+  
+  const newBuffer = new Float32Array(current.length + loopData.length);
+  newBuffer.set(current.slice(0, endSample), 0);
+  newBuffer.set(loopData, endSample);
+  newBuffer.set(partAfter, endSample + loopData.length);
+  
+  current = newBuffer;
+  loopStart = 0; loopEnd = 0;
+  updateUI();
+  setStatus('Selection duplicated', 900);
+  await saveAudioToDB(current);
+}
+
+async function deleteLoop() {
+  if (!current) { setStatus('Load a file first', 800); return; }
+  if (!audioCtx) initAudioContext();
+  const hasLoop = loopEnd > loopStart && (loopEnd - loopStart) > 0.02;
+  if (!hasLoop) { setStatus('Select a region to delete', 1000); return; }
+  if (playing) stopPlaybackSilent();
+  
+  await saveState();
+  const sr = audioCtx.sampleRate;
+  const startSample = Math.floor(loopStart * sr);
+  const endSample = Math.floor(loopEnd * sr);
+  
+  const selectionLength = endSample - startSample;
+  const newLength = current.length - selectionLength;
+  if (newLength <= 0) {
+    current = new Float32Array(0);
+  } else {
+    const newBuffer = new Float32Array(newLength);
+    newBuffer.set(current.slice(0, startSample), 0);
+    newBuffer.set(current.slice(endSample), startSample);
+    current = newBuffer;
+  }
+  
+  loopStart = 0; loopEnd = 0;
+  updateUI();
+  setStatus('Selection deleted', 900);
+  await saveAudioToDB(current);
+}
+
+function stopPlaybackSilent(){
+  if(playSource){ try{playSource.stop();}catch(e){} try{playSource.disconnect();}catch(e){} playSource=null; }
+  playing = false;
+  playBtn.textContent = 'Play';
+}
+
+function stopPlayback(){
+  stopPlaybackSilent();
+  setStatus('Stopped', 600);
+}
+
+async function startPlayback(at=0){
+  stopPlaybackSilent();
+  if(!current) return setStatus('No file',800);
+  if (!audioCtx) initAudioContext();
+  if(audioCtx.state === 'suspended') await audioCtx.resume();
+  
+  const buf = audioCtx.createBuffer(1, current.length, audioCtx.sampleRate);
+  buf.getChannelData(0).set(current);
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf; src.connect(audioCtx.destination);
+  
+  if(loopEnd > loopStart && (loopEnd - loopStart) > 0.02){
+    src.loop = true; src.loopStart = loopStart; src.loopEnd = loopEnd;
+    playLoopActive = true;
+    src.start(0, at >= loopEnd ? loopStart : at);
+  } else {
+    src.loop = false; playLoopActive = false;
+    src.start(0, at);
+  }
+  
+  playSource = src; playing = true;
+  playStartTime = audioCtx.currentTime; playOffset = at;
+  playBtn.textContent = 'Playing...';
+  src.onended = () => { if (src === playSource && !playLoopActive) { playing = false; playBtn.textContent = 'Play'; setStatus('Playback ended', 800); } };
+}
+playBtn.onclick = async () => { if(!audioCtx) initAudioContext(); if(playing){ stopPlayback(); return; } await startPlayback(lastPlayheadPos || 0); };
+stopBtn.onclick = stopPlayback;
+
+/* ======= Overlay Interaction & Drawing ======= */
+let isDragging=false, dragStartX=0, dragCurrentX=0, pointerDown=false, isDraggingLoopEdge=false, draggingEdge=null;
+let lastPlayheadPos = 0;
+function setupOverlayInteraction(){
+  overlay.addEventListener('pointerdown', (ev) => {
+    if(!current) return;
+    overlay.setPointerCapture(ev.pointerId);
+    pointerDown = true;
+    const x = (ev.clientX - overlay.getBoundingClientRect().left);
+    dragStartX = x; dragCurrentX = x; isDragging = true;
+    const [sx, ex] = loopPixels(); const edgeTolerance = 12;
+    if(sx!==null && Math.abs(x - sx) < edgeTolerance){ isDraggingLoopEdge = true; draggingEdge='start'; }
+    else if(ex!==null && Math.abs(x - ex) < edgeTolerance){ isDraggingLoopEdge = true; draggingEdge='end'; }
+    else isDraggingLoopEdge = false;
+  });
+  overlay.addEventListener('pointermove', (ev) => {
+    const rect = overlay.getBoundingClientRect();
+    const x = Math.max(0, Math.min(rect.width, ev.clientX - rect.left));
+    if(!pointerDown){ lastPlayheadPos = xToTime(x); drawOverlay(); return; }
+    dragCurrentX = x;
+    if(isDragging && isDraggingLoopEdge){
+      const t = xToTime(x);
+      if(draggingEdge==='start'){ loopStart = Math.max(0, Math.min(loopEnd - 0.02, t)); }
+      else { loopEnd = Math.min(durationSeconds(), Math.max(loopStart + 0.02, t)); }
+    }
+    drawOverlay();
+  });
+  overlay.addEventListener('pointerup', (ev) => {
+    if(!pointerDown) return;
+    pointerDown = false;
+    overlay.releasePointerCapture(ev.pointerId);
+    if(isDraggingLoopEdge){ if(loopEnd - loopStart > 0.02) startPlayback(loopStart); }
+    else {
+      const a = dragStartX, b = dragCurrentX;
+      if(Math.abs(b - a) < 6){ const t = xToTime(b); lastPlayheadPos = t; startPlayback(t); }
+      else {
+        const t1=xToTime(a), t2=xToTime(b); loopStart=Math.min(t1,t2); loopEnd=Math.max(t1,t2);
+        if(loopEnd - loopStart < 0.02) loopEnd = Math.min(durationSeconds(), loopStart + 0.02);
+        startPlayback(loopStart);
+      }
+    }
+    isDragging = false; isDraggingLoopEdge=false; draggingEdge=null;
+    drawOverlay();
+  });
+  overlay.addEventListener('dblclick', ()=>{
+    loopStart = 0;
+    loopEnd = 0;
+    drawOverlay();
+    if (playing) {
+      startPlayback(lastPlayheadPos);
+    }
+  });
+}
+function xToTime(x){ if (!audioCtx) return 0; const rect = overlay.getBoundingClientRect(); return Math.max(0, Math.min(1, x / (rect.width||1))) * durationSeconds(); }
+function timeToX(time){ const rect = overlay.getBoundingClientRect(); return (time / Math.max(1e-4, durationSeconds())) * (rect.width||1); }
+function durationSeconds(){ if (!audioCtx) return 0; return current ? (current.length / audioCtx.sampleRate) : 0; }
+function loopPixels(){ if(!current || loopEnd<=loopStart) return [null,null]; return [ timeToX(loopStart), timeToX(loopEnd) ]; }
+
+function drawOverlay(){
+  const w = octx.canvas.width / devicePixelRatio, h = octx.canvas.height / devicePixelRatio;
+  octx.clearRect(0,0,w,h);
+  if(loopEnd > loopStart && current){
+    const sx = timeToX(loopStart), ex = timeToX(loopEnd);
+    octx.save();
+    octx.fillStyle = hexToRGBA(accent,0.08); octx.fillRect(sx, 0, ex - sx, h);
+    octx.lineWidth = 2; octx.strokeStyle = accent; octx.shadowColor = accent; octx.shadowBlur = 12;
+    octx.strokeRect(sx+1, 1, ex-sx-2, h-2);
+    octx.restore();
+  }
+  if(isDragging && !isDraggingLoopEdge && pointerDown){
+    const sx = Math.min(dragStartX,dragCurrentX), ex = Math.max(dragStartX,dragCurrentX);
+    octx.save();
+    octx.fillStyle = hexToRGBA(accent,0.05); octx.fillRect(sx, 0, ex-sx, h);
+    octx.lineWidth = 1.6; octx.strokeStyle = accent; octx.setLineDash([6,6]);
+    octx.strokeRect(sx+1, 1, ex-sx-2, h-2);
+    octx.restore();
+  }
+  let playPos = lastPlayheadPos;
+  if (playing && audioCtx) {
+    const elapsed = audioCtx.currentTime - playStartTime;
+    let posSec = playOffset + elapsed;
+    if (playLoopActive && (loopEnd - loopStart) > 0) { posSec = loopStart + ((posSec - loopStart) % (loopEnd-loopStart)); }
+    else { posSec = posSec % Math.max(1e-4, durationSeconds()); }
+    playPos = posSec; lastPlayheadPos = posSec;
+  }
+  if(current){
+    const x = timeToX(playPos);
+    octx.save();
+    octx.strokeStyle = '#fff'; octx.lineWidth = 1; octx.globalAlpha = 0.95;
+    octx.beginPath(); octx.moveTo(x, 0); octx.lineTo(x, h); octx.stroke();
+    octx.restore();
+  }
+}
+function hexToRGBA(hex, a=1){ const h=hex.replace('#',''),r=parseInt(h.substring(0,2),16),g=parseInt(h.substring(2,4),16),b=parseInt(h.substring(4,6),16); return `rgba(${r},${g},${b},${a})`; }
+function drawWaveform(){
+  const w=ctx.canvas.width/devicePixelRatio, h=ctx.canvas.height/devicePixelRatio;
+  ctx.clearRect(0,0,w,h); ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0,0,w,h);
+  if(!current) return;
+  ctx.fillStyle = accent;
+  const step = Math.ceil(current.length / w);
+  for(let x=0; x<w; x++){
+    const i = x * step;
+    let min = 1, max = -1;
+    for(let j=0;j<step && i+j<current.length;j++){ const v=current[i+j]; if(v<min)min=v; if(v>max)max=v; }
+    const y1=((max+1)/2)*h, y2=((min+1)/2)*h;
+    ctx.fillRect(x, y1, 1, Math.max(1, y2-y1));
+  }
+}
+let lastDrawTime = 0;
+function drawLoop(ts){
+  if(!lastDrawTime || ts - lastDrawTime > 16){ drawWaveform(); drawOverlay(); lastDrawTime = ts; }
+  requestAnimationFrame(drawLoop);
+}
+
+/* ======= Keyboard & Export ======= */
+document.addEventListener('keydown', async (e) => {
+  if (modalOverlay.classList.contains('show')) { if(e.key === 'Escape') hideModal(); if(e.key === 'Enter') modalCommit.click(); return; }
+  const cmd = e.metaKey || e.ctrlKey;
+  if(e.code === 'Space') { e.preventDefault(); playBtn.click(); }
+  if (cmd && e.key.toLowerCase() === 'z') { e.preventDefault(); undoBtn.click(); }
+  if (cmd && e.key.toLowerCase() === 'y') { e.preventDefault(); redoBtn.click(); }
+  if (cmd && e.key.toLowerCase() === 's') { e.preventDefault(); exportBtn.click(); }
+  if (cmd && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateLoop(); }
+  if ((e.key === 'Backspace' || e.key === 'Delete') && loopEnd > loopStart) { e.preventDefault(); deleteLoop(); }
+});
+
+function writeWAV(arr, sr){
+  const buf = new ArrayBuffer(44 + arr.length*2), view = new DataView(buf);
+  const writeS = (o,s) => { for(let i=0;i<s.length;i++) view.setUint8(o+i,s.charCodeAt(i)); };
+  writeS(0,'RIFF'); view.setUint32(4,36+arr.length*2,!0); writeS(8,'WAVE'); writeS(12,'fmt ');
+  view.setUint32(16,16,!0); view.setUint16(20,1,!0); view.setUint16(22,1,!0); view.setUint32(24,sr,!0);
+  view.setUint32(28,sr*2,!0); view.setUint16(32,2,!0); view.setUint16(34,16,!0); writeS(36,'data');
+  view.setUint32(40,arr.length*2,!0);
+  for(let i=0;i<arr.length;i++){ let s=Math.max(-1,Math.min(1,arr[i])); view.setInt16(44+i*2,s<0?s*32768:s*32767,!0); }
+  return new Blob([view], {type:'audio/wav'});
+}
+exportBtn.onclick = async () => {
+  if(!current) return setStatus('Load a file first',800);
+  if (!audioCtx) initAudioContext();
+  glitchProgressStart('Exporting...', 600);
+  setTimeout(() => {
+    try {
+      const wav = writeWAV(current, audioCtx.sampleRate);
+      const url = URL.createObjectURL(wav);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'databend_export_' + Date.now() + '.wav';
+      a.click(); URL.revokeObjectURL(url);
+      setStatus('Exported',1000);
+    } catch(e){ console.error(e); setStatus('Export failed',1200); }
+  }, 250);
+};
+
+/* ======= Final UI Update ======= */
+function updateUI(){
+  if(!current || !audioCtx){ durationEl.textContent='0.00s'; fileInfoEl.textContent='No file loaded'; return; }
+  const dur = durationSeconds();
+  durationEl.textContent = (dur > 0 ? dur.toFixed(2) : '0.00') + 's';
+  fileInfoEl.textContent = `${(current.length/1000).toFixed(0)}k samples @ ${audioCtx.sampleRate}Hz`;
+}
+updateUI();
+</script>
+</body>
+</html>
